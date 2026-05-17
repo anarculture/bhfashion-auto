@@ -1,0 +1,38 @@
+﻿Plan de Implementación: Despliegue Masivo Meta Ads - BH FASHION
+Este documento detalla la especificación técnica y el plan de ejecución para automatizar el despliegue de campañas publicitarias en Meta, eliminando la gestión manual y optimizando la eficiencia operativa de BH FASHION.
+1. Objetivo del Proyecto
+Sustituir la carga manual en el Ads Manager por una arquitectura autónoma que traduzca variables desde una hoja de cálculo directamente a la API de Meta, reduciendo el tiempo de ejecución de 45 minutos a segundos.
+2. Disección del Despliegue Masivo
+La arquitectura se basa en tres componentes críticos:
+Componente
+	Descripción Técnica
+ 
+	Dashboard Tabular
+	Google Sheets como fuente única de verdad para nombres de campaña, presupuestos y segmentaciones.
+	Orquestador (n8n)
+	Lógica de flujo que lee filas con estado "Pendiente" y ejecuta la carga de activos multimedia.
+	Jerarquía de API
+	Creación secuencial en Meta: Campaña -> AdSet -> AdCreative -> Ad.
+	3. Roadmap de Implementación Técnica
+1. Configuración de Capa de Datos: Estructuración del Google Sheet con validación de estados.
+2. Gestión de Infraestructura y Permisos: Creación de Meta App, configuración de permisos ads_management y obtención de tokens permanentes.
+3. Desarrollo de Flujos en n8n: Construcción de la secuencia lógica de nodos y manejo de errores.
+4. Guía de Ejecución (Metodología Boris Tane)
+4.1. Research (Investigación)
+* Estudio de endpoints específicos de la Meta Graph API v23.
+* Validación de formatos JSON para subida de adimages.
+4.2. Plan (Planificación)
+* Mapeo del flujo: Gatillo -> Lectura -> Iteración -> Creación -> Actualización de estado.
+* Definición de protocolos ante fallos de carga de activos.
+4.3. Annotate (Estructura)
+Definición de payloads JSON para cada etapa de la jerarquía. Ejemplo para Campaña:
+{
+ "name": "Nombre_Desde_Sheet",
+ "objective": "OUTCOME_SALES",
+ "status": "PAUSED"
+}
+
+4.4. Implement (Implementación)
+* Desarrollo en entorno Sandbox.
+* Construcción de nodos de cascada (Campaign > Adset > Creative > Ad).
+* Inyección de IDs resultantes en el Dashboard para registro de auditoría.

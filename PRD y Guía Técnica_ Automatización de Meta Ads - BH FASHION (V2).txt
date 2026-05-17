@@ -1,0 +1,138 @@
+PRD y Guía Técnica: Automatización de Meta Ads - BH FASHION (V2)
+Preparado por: Mau Dávila-Barbe / colectivo htmk://
+Para: Equipo de Implementación - BH FASHION
+Marco de Trabajo: Boris Tane (Research, Plan, Annotate, Implement)
+Fecha de revisión: 2026-05-16
+Documentos vinculados: CONTEXT.md, docs/adr/0001-0003
+
+────────────────────────────────────────────────────────
+0. Notas sobre esta revisión (V2)
+────────────────────────────────────────────────────────
+
+V1 propuso 6 Pilares Operativos con asunciones sobre cómo se generarían los creativos (subida de imágenes + síntesis Gemini de 5 variaciones por fila). Una sesión de grilling con el cliente reveló:
+
+- El cliente cura el contenido en Instagram primero. El input al sistema es la URL de un post IG ya publicado; el ad reusa ese post tal cual (paradigma Boost). Esto elimina Pilar 2 (Ingeniería de Imagen) y Pilar 4 (Síntesis Gemini) de Fase 1. Ver ADR-0003.
+- El cliente quiere control manual sobre cuándo se publica a Meta — no auto-disparos por edición. Trigger: checkbox por fila + botón global vía Apps Script. Ver ADR-0002.
+- Para evitar doble despliegue cuando Single y Batch coexisten, el state-of-truth se mueve a Postgres. Sheets queda como UI. Ver ADR-0001.
+
+V2 documenta el sistema resultante: 3 pilares activos (Despliegue, Métricas, Alertas), 1 diferido (Espionaje), 2 muertos (Imagen, Gemini).
+
+Para el glosario de términos del dominio ver CONTEXT.md.
+
+────────────────────────────────────────────────────────
+1. Pilares de Fase 1
+────────────────────────────────────────────────────────
+
+Pilar 1 — Despliegue Atómico con Agrupación por Campaña
+  Descripción: cada fila marcada en Google Sheets se traduce en 1 AdSet + 1 Ad bajo una Campaign reusable por nombre. El AdCreative referencia un post de Instagram existente (Boost).
+  Modos: Single (1 fila) y Batch (N filas), mismo trigger manual.
+  Impacto: cliente despliega N posts curados a Meta con un clic, sin entrar a Ads Manager.
+
+Pilar 5 — Extracción de Métricas
+  Descripción: cron 2x/día (08:00 y 20:00 Caracas) consulta /insights por ad activo. Snapshots históricos en Postgres con ventanas today y last_7d.
+  Impacto: historial completo de rendimiento sin abrir Meta UI. Base para alertas y dashboards.
+
+Pilar 6 — Filtro de Alertas
+  Descripción: post-métricas, evalúa 6 reglas (cpa_critico, spend_sin_conversiones, frequency_alta, roas_bajo, ctr_bajo, pacing_alto) contra umbrales definidos por Campaña. Dispara Slack con cooldown 24h por (ad_id, regla).
+  Impacto: gestión por excepción — cliente solo recibe ping cuando algo falla.
+
+Pilar 3 — Espionaje Ad Library: diferido a Fase 2.
+Pilar 2 — Ingeniería de Imagen: eliminado (no aplica al paradigma Boost).
+Pilar 4 — Síntesis Gemini: eliminado (Boost reusa copy del post IG).
+
+────────────────────────────────────────────────────────
+2. Arquitectura
+────────────────────────────────────────────────────────
+
+Componentes:
+
+  Google Sheets (UI cliente)
+    - Hoja Deploys: 1 fila = 1 ad. Inputs cliente + outputs read-only sync desde Postgres.
+    - Hoja Campañas: config Campaign-level (objective, special_ad_categories, umbrales de alerta).
+    - Hoja Audiencias: alias amigable → meta_audience_id (Custom / Lookalike / Saved).
+    - Apps Script: menú "BH Ads → Desplegar Marcadas". POST webhook n8n con filas donde Desplegar=TRUE.
+
+  n8n (orquestación) — workflows:
+    - meta-ads-deploy: webhook trigger, Pilar 1.
+    - meta-ads-metrics: cron 08:00/20:00, Pilar 5.
+    - meta-ads-alerts: trigger post-metrics, Pilar 6.
+    - meta-ads-cleanup: cron 03:00, pausa ads con fecha_fin pasada.
+
+  Postgres (state-of-truth) — tablas:
+    - deployments: máquina de estados por fila, IDs Meta, error_log.
+    - campaigns_meta: cache nombre→campaign_id Meta, INSERT ON CONFLICT para race control.
+    - metrics_snapshots: snapshots históricos por ad/ventana.
+    - alerts_sent: cooldown alertas por (ad_id, regla).
+
+  Meta Graph API v25.0 — endpoints relevantes:
+    - GET /<ig_media_id>?fields=id (validación pre-claim)
+    - POST /act_<account>/campaigns (lookup-or-create)
+    - POST /act_<account>/adsets
+    - POST /act_<account>/adcreatives con instagram_permalink_url + instagram_actor_id
+    - POST /act_<account>/ads
+    - GET /<ad_id>/insights (métricas)
+
+  Slack — 2 canales:
+    - #bh-ads-alerts: notificaciones de negocio al cliente.
+    - #bh-ads-ops: errores de infraestructura al operador.
+
+Máquina de estados por fila:
+
+  Borrador → Pendiente → Desplegando → {Desplegado | Error}
+                                              ↓
+                                          Finalizado (post fecha_fin)
+  Retry: cliente cambia Error → Pendiente manualmente.
+
+────────────────────────────────────────────────────────
+3. Restricciones de diseño aceptadas
+────────────────────────────────────────────────────────
+
+- Trigger 100% manual. No hay cron de auto-deploy ni onEdit. Cliente decide cuándo gastar.
+- Status inicial de todo ad nuevo: PAUSED. Cliente revisa en Meta UI y activa. Safety net.
+- Filas Desplegado/Finalizado son inmutables. Editar columnas no propaga a Meta. Para cambiar = clonar fila.
+- Multi-cliente fuera de alcance Fase 1. Variables Globales hardcoded BH Fashion.
+- Pilar 6 requiere Pixel ID verificado antes de habilitarse (reglas dependen de purchases_count).
+
+────────────────────────────────────────────────────────
+4. Roadmap Técnico
+────────────────────────────────────────────────────────
+
+Orden de implementación. Cada paso es una vertical slice end-to-end (ver issues asociadas).
+
+  1. Foundation: Postgres schemas (deployments, campaigns_meta, metrics_snapshots, alerts_sent) + Google Sheets template con 3 hojas + Apps Script con menú.
+  2. Pilar 1 — Despliegue Single: 1 fila → 1 Ad Boost en Meta status=PAUSED, sync back a Sheets.
+  3. Pilar 1 — Despliegue Batch: N filas, dedupe Campañas, paralelo N=5, retry con backoff.
+  4. Validación pre-claim: FKs entre hojas, formato URL IG, ranges, lookup IG post.
+  5. Pilar 5 — Métricas: cron 2x/día, snapshots con 2 ventanas.
+  6. Pilar 6 — Alertas: reglas + cooldown + Slack (gated por Pixel ID).
+  7. Cleanup: cron diario pausa ads expirados.
+  8. Observabilidad: error trigger global → #bh-ads-ops.
+
+────────────────────────────────────────────────────────
+5. Guía de Implementación (Boris Tane Framework)
+────────────────────────────────────────────────────────
+
+5.1 Research
+  - Meta Graph API v25.0: endpoints /campaigns, /adsets, /adcreatives, /ads, /insights.
+  - AdCreative para Boost de IG post: campos instagram_permalink_url, instagram_actor_id, effective_object_story_id.
+  - n8n nodes: Webhook, Postgres, HTTP Request, Split In Batches, Schedule Trigger, Slack.
+  - Google Apps Script: menú custom, UrlFetchApp, onOpen trigger.
+
+5.2 Plan
+  - Para cada Pilar revisar CONTEXT.md y los ADRs asociados antes de empezar.
+  - Identificar credenciales requeridas: token Meta System User, Postgres connection, Slack webhooks.
+
+5.3 Annotate
+  - Reutilizar terminología exacta de CONTEXT.md en nombres de nodos n8n, columnas Postgres, mensajes Slack.
+  - Documentar cualquier desviación durante implementación en CONTEXT.md o crear ADR nuevo si la decisión es hard-to-reverse.
+
+5.4 Implement
+  - Workflow base existente en "Meta Ads Auto Deploy (Fixed).json" requiere refactor mayor por cambio a paradigma Boost (ver meta_ads_workflow_audit.md). Eliminar nodos: Download Media, Validar MIME, Upload AdImage, Gemini, fan-out 5 ads. Agregar nodos: Postgres claim, Postgres campaigns_meta cache, sync back a Sheets.
+  - Probar en Sandbox account antes de cuenta BH Fashion (act_5314378785280789).
+  - Issues con detalle por slice publicadas en el tracker.
+
+────────────────────────────────────────────────────────
+6. Documento vivo
+────────────────────────────────────────────────────────
+
+CONTEXT.md y ADRs son los documentos canónicos. Este PRD describe el "qué" y el "por qué"; CONTEXT.md describe el dominio en detalle; ADRs registran decisiones específicas hard-to-reverse. Cualquier desviación durante implementación debe propagarse a esos documentos antes de mergear código.

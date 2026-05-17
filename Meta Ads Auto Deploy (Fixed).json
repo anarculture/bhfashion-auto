@@ -1,0 +1,402 @@
+{
+  "name": "Meta Ads Auto Deploy (Fixed)",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v25.0/act_{{ $('Variables Globales').first().json.ad_account_id }}/ads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $('Webhook Sheets').first().json.body.campaign_name }} - Ad {{ $itemIndex + 1 }}\",\n  \"adset_id\": \"{{ $('Create AdSet').first().json.id }}\",\n  \"creative\": { \"creative_id\": \"{{ $json.id }}\" },\n  \"status\": \"PAUSED\"\n}",
+        "options": {}
+      },
+      "id": "6cb17621-5084-42fe-89fa-87cd57389e4a",
+      "name": "Create Ad",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1888,
+        0
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "AQ2tmf94MUYVp0JI",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v25.0/act_{{ $('Variables Globales').first().json.ad_account_id }}/adcreatives",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $('Webhook Sheets').first().json.body.campaign_name }} - Creative\",\n  \"object_story_spec\": {\n    \"page_id\": \"{{ $('Variables Globales').first().json.page_id.toString().trim() }}\",\n    \"instagram_actor_id\": \"{{ $('Variables Globales').first().json.instagram_account_id.toString().trim() }}\",\n    \"link_data\": {\n      \"image_hash\": \"{{ Object.values($('Upload AdImage').first().json.images)[0].hash }}\",\n      \"link\": \"{{ $('Webhook Sheets').first().json.body.destination_url }}\",\n      \"message\": \"{{ $json.primary_text }}\",\n      \"name\": \"{{ $json.headline }}\",\n      \"call_to_action\": {\n        \"type\": \"LEARN_MORE\"\n      }\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "a22c6a8d-7e19-45f7-82db-262c3bf92c5c",
+      "name": "Create AdCreative",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1664,
+        0
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "AQ2tmf94MUYVp0JI",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let response = $input.item.json.candidates[0].content.parts[0].text;\nresponse = response.replace(/```json/g, '').replace(/```/g, '').trim();\nlet variations = JSON.parse(response);\nreturn variations.map(v => ({ json: v }));"
+      },
+      "id": "df50e976-8db8-4fe7-9037-417a0e756b09",
+      "name": "Parse JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Genera 5 variaciones de copy para Facebook Ads. El texto original es: '{{ $('Webhook Sheets').first().json.body.primary_text }}' y el headline original es '{{ $('Webhook Sheets').first().json.body.headline }}'. Devuelve SOLO un array JSON válido con 5 objetos, donde cada objeto tenga las propiedades 'primary_text' y 'headline'.\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\"\n  }\n}",
+        "options": {}
+      },
+      "id": "34636f71-367e-46cd-9d7a-f8638ce77111",
+      "name": "Gemini AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1184,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "GhMm4ppy4Tg42cqd",
+          "name": "Query Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v25.0/act_{{ $('Variables Globales').first().json.ad_account_id }}/adimages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "filename",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d8a6d0bf-2f7c-4f5c-ad74-f98682f99f1d",
+      "name": "Upload AdImage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        528,
+        -16
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "AQ2tmf94MUYVp0JI",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v25.0/act_{{ $('Variables Globales').first().json.ad_account_id }}/adsets",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $('Webhook Sheets').first().json.body.campaign_name }} - AdSet\",\n  \"campaign_id\": \"{{ $('Create Campaign').first().json.id }}\",\n  \"daily_budget\": {{ Math.round($('Webhook Sheets').first().json.body.daily_budget * 100) }},\n  \"billing_event\": \"IMPRESSIONS\",\n  \"optimization_goal\": \"IMPRESSIONS\",\n  \"bid_strategy\": \"LOWEST_COST_WITHOUT_CAP\",\n  \"targeting\": {\n    \"geo_locations\": {\n      \"countries\": [\"US\"]\n    },\n    \"age_min\": 18,\n    \"publisher_platforms\": [\"facebook\", \"instagram\"],\n    \"facebook_positions\": [\"feed\", \"story\"],\n    \"instagram_positions\": [\"stream\", \"story\", \"reels\"]\n},\n  \"status\": \"PAUSED\"\n}",
+        "options": {}
+      },
+      "id": "98bc5a5d-774d-45d5-a294-82d6524278eb",
+      "name": "Create AdSet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        928,
+        0
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "AQ2tmf94MUYVp0JI",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v25.0/act_{{ $('Variables Globales').first().json.ad_account_id }}/campaigns",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $('Webhook Sheets').first().json.body.campaign_name }}\",\n  \"objective\": \"OUTCOME_SALES\",\n  \"status\": \"PAUSED\",\n  \"special_ad_categories\": [],\n  \"is_adset_budget_sharing_enabled\": false\n}",
+        "options": {}
+      },
+      "id": "c8851256-5c27-4bf1-af6e-fd3820eaf46a",
+      "name": "Create Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        704,
+        0
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "AQ2tmf94MUYVp0JI",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $binary?.data?.mimeType || '' }}",
+              "operation": "contains",
+              "value2": "image"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "01134a11-aaf5-4452-9593-a586d0c1f781",
+      "name": "Validar MIME",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Webhook Sheets').first().json.body.media_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "ee3dcb17-e935-472f-b45c-620f97fdfe8c",
+      "name": "Download Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        96,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fields": {
+          "values": [
+            {
+              "name": "ad_account_id",
+              "stringValue": "5314378785280789"
+            },
+            {
+              "name": "page_id",
+              "stringValue": "111921501694313"
+            },
+            {
+              "name": "instagram_account_id",
+              "stringValue": "17841408634629405"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "84ab28a8-6c15-415f-b8a7-b0d7deabb42a",
+      "name": "Variables Globales",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        -128,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meta-ads-deploy",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "6b67712a-e432-4542-b9d5-0e0904de7f5c",
+      "name": "Webhook Sheets",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        0
+      ],
+      "webhookId": "413309ae-f6fd-42f7-b199-ba3b72f05eed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Create AdCreative": {
+      "main": [
+        [
+          {
+            "node": "Create Ad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON": {
+      "main": [
+        [
+          {
+            "node": "Create AdCreative",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini AI": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload AdImage": {
+      "main": [
+        [
+          {
+            "node": "Create Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create AdSet": {
+      "main": [
+        [
+          {
+            "node": "Gemini AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Campaign": {
+      "main": [
+        [
+          {
+            "node": "Create AdSet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar MIME": {
+      "main": [
+        [
+          {
+            "node": "Upload AdImage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Media": {
+      "main": [
+        [
+          {
+            "node": "Validar MIME",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Variables Globales": {
+      "main": [
+        [
+          {
+            "node": "Download Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Sheets": {
+      "main": [
+        [
+          {
+            "node": "Variables Globales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "1ecf1f10-5bf8-4201-b67f-3ddcd784b83d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d0db53913a8ed96628e3260520e83716024787b5744d101a0aef4f3b128438af"
+  },
+  "id": "OlnXVeUxaptFE3r5",
+  "tags": []
+}
