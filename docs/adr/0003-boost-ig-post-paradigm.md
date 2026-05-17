@@ -31,6 +31,6 @@ Estructura jerárquica resultante por fila: 1 Campaign + 1 AdSet + 1 Ad.
 - PRD Pilar 4 queda fuera de alcance Fase 1. Documentar como diferido.
 - Workflow se simplifica: 11 nodos → estimado ~6 nodos.
 - Gemini API y costos asociados no aplican en Fase 1.
-- Métricas (PRD Pilar 5) y Alertas (Pilar 6) se mantienen como worflows separados.
+- Métricas (PRD Pilar 5) y Alertas (Pilar 6) se mantienen como workflows separados con notificaciones vía Telegram.
 - Ventaja: ads heredan social proof del post original (likes/comments visibles).
 - Restricción: cliente debe publicar en IG antes de poder hacer ad — flujo de trabajo cambia.

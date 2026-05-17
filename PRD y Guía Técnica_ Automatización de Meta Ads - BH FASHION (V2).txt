@@ -72,9 +72,9 @@ Componentes:
     - POST /act_<account>/ads
     - GET /<ad_id>/insights (métricas)
 
-  Slack — 2 canales:
-    - #bh-ads-alerts: notificaciones de negocio al cliente.
-    - #bh-ads-ops: errores de infraestructura al operador.
+  Telegram — 2 destinos:
+    - Bot bh-ads-alerts: notificaciones de negocio al cliente (chat directo).
+    - Grupo bh-ads-ops: errores de infraestructura al operador.
 
 Máquina de estados por fila:
 

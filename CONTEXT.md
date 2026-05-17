@@ -87,9 +87,11 @@ Una fila en estado `Desplegado` o `Finalizado` es inmutable desde el sistema. Ed
 ### Timezone
 `America/Caracas` (UTC-4) para todas las operaciones de tiempo cliente-facing: crons (`08:00`/`20:00`/`03:00`), interpretación de `Fecha inicio`/`Fecha fin`, hora en `pacing_alto`. Postgres almacena `timestamptz` UTC; conversión en queries.
 
-### Canales Slack
-- `#bh-ads-alerts` — alertas de negocio Pilar 6 (cliente).
-- `#bh-ads-ops` — errores workflow / infra (operador). n8n error trigger global → POST aquí.
+### Canales Telegram
+- **Bot cliente** (`bh-ads-alerts`): alertas de negocio Pilar 6. Mensaje directo al chat del cliente.
+- **Grupo ops** (`bh-ads-ops`): errores workflow / infra. Chat compartido operador + cliente si escala. n8n error trigger global → POST aquí.
+
+Setup: bot creado via @BotFather → token en n8n credentials → `chat_id` cliente almacenado en Variables Globales n8n.
 
 ### Dependencia Pixel ID
 Pilar 6 reglas `cpa_critico`, `roas_bajo`, `spend_sin_conversiones` dependen de `purchases_count` / `purchases_value` correctos. Estos requieren Pixel ID configurado y eventos `purchase` reportando desde el sitio. Pilar 6 NO se habilita hasta verificación pixel. Pilar 1 y Pilar 5 funcionan sin pixel (snapshots existen, solo `purchases=0`).
