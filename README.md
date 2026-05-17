@@ -1,34 +1,67 @@
-# BH FASHION - Automatización de Meta Ads
+# BH Fashion — Automatización de Meta Ads
 
-Este repositorio contiene la documentación, configuraciones y guías técnicas para el proyecto de automatización del despliegue masivo y gestión de anuncios en Meta para BH FASHION.
-
-## Objetivo del Proyecto
-
-Transformar la gestión de anuncios de un proceso manual y subjetivo a una arquitectura autónoma basada en datos. Este sistema sustituye la carga manual en el Ads Manager por una arquitectura que traduce variables desde una hoja de cálculo (Google Sheets) directamente a la API de Meta, reduciendo el tiempo de ejecución de 45 minutos a segundos.
-
-## Pilares Operativos
-
-1. **Despliegue Masivo:** Traducción de filas de Google Sheets a solicitudes HTTP POST hacia la Meta Graph API v23.
-2. **Ingeniería de Imagen:** Carga automatizada de archivos multimedia para la obtención de `image_hashes`.
-3. **Espionaje Algorítmico:** Scraping de la Facebook Ad Library para detectar tendencias en el sector fashion.
-4. **Síntesis de Creativos:** Uso de IA (Gemini 2.5 Flash) para generar variaciones de copy basadas en datos ganadores e ingeniería inversa de ganchos exitosos.
-5. **Extracción de Métricas:** Consultas cíclicas vía API para extraer Spend, ROAS y CPA.
-6. **Filtro de Alertas:** Lógica condicional que dispara webhooks a Slack ante métricas (ej. CPA) críticas.
-
-## Arquitectura del Sistema
-
-* **Capa de Datos (Foundation):** Google Sheets como el "Single Source of Truth" (Dashboard Tabular).
-* **Capa de Orquestación:** Instancia de n8n para el manejo y lógica de los flujos.
-* **Capa de Integración:** Meta Graph API v23 (Campaña -> Adset -> Creative -> Ad).
-* **Capa de Inteligencia:** API de Google Gemini para procesamiento de lenguaje natural.
-* **Capa de Notificación:** Slack Webhooks para reportes por excepción.
-
-## Estructura del Repositorio
-
-* `Meta Ads Auto Deploy (Fixed).json` - El flujo principal de automatización en n8n.
-* `Plantilla_Meta_Ads.csv` - Estructura base de datos requerida para el despliegue.
-* `PRD y Guía Técnica*.txt` - Documentos de requerimientos de producto (PRD) y metodologías.
-* `ABOUT_ES.md` - Guía de bienvenida e instrucciones para los colaboradores del equipo.
+Sistema de despliegue y monitoreo de anuncios en Meta para BH Fashion, orquestado desde Google Sheets vía n8n.
 
 ---
+
+## Qué hace este sistema
+
+El cliente selecciona posts de Instagram existentes en Google Sheets y los convierte en ads pagos en Meta con un clic — sin entrar a Meta Ads Manager. El sistema también monitorea el rendimiento y alerta por Telegram cuando algo falla.
+
+**Pilares activos en Fase 1:**
+- **Despliegue** (Pilar 1): 1 post IG → 1 Ad Boost en Meta. Modos Single (1 fila) y Batch (N filas).
+- **Métricas** (Pilar 5): snapshots de rendimiento 2x/día en Postgres.
+- **Alertas** (Pilar 6): notificaciones Telegram cuando CPA, ROAS, frecuencia u otras métricas se salen de umbral.
+
+**Diferido a Fase 2:** Espionaje Ad Library (Pilar 3).
+
+---
+
+## Documentación
+
+| Documento | Para qué |
+|---|---|
+| [`ABOUT_ES.md`](ABOUT_ES.md) | Guía de onboarding para el colaborador — leer primero |
+| [`CONTEXT.md`](CONTEXT.md) | Glosario del dominio — terminología canónica del sistema |
+| [`PRD y Guía Técnica V2.txt`](PRD%20y%20Guía%20Técnica_%20Automatización%20de%20Meta%20Ads%20-%20BH%20FASHION%20(V2).txt) | Requerimientos, arquitectura y roadmap técnico |
+| [`SETUP.md`](SETUP.md) | IDs de producción Meta, credenciales n8n, estado del setup |
+| [`docs/adr/`](docs/adr/) | Decisiones de arquitectura (hard-to-reverse) |
+
+---
+
+## Arquitectura resumida
+
+```
+Google Sheets (UI cliente)
+  ├── Hoja Deploys     → 1 fila = 1 ad
+  ├── Hoja Campañas    → config Campaign-level + umbrales de alerta
+  └── Hoja Audiencias  → alias → ID de audiencia Meta
+
+Apps Script (botón "BH Ads → Desplegar Marcadas")
+  └── POST webhook → n8n
+
+n8n (orquestación)
+  ├── meta-ads-deploy    → Pilar 1
+  ├── meta-ads-metrics   → Pilar 5 (cron 08:00/20:00 Caracas)
+  ├── meta-ads-alerts    → Pilar 6 (post-metrics)
+  └── meta-ads-cleanup   → pausa ads expirados (cron 03:00 Caracas)
+
+Postgres (state-of-truth)
+  ├── deployments        → estado por fila, IDs Meta
+  ├── campaigns_meta     → cache nombre→campaign_id
+  ├── metrics_snapshots  → historial rendimiento
+  └── alerts_sent        → cooldown alertas
+
+Meta Graph API v25.0
+Telegram (alertas cliente + ops)
+```
+
+---
+
+## Issues de implementación
+
+Ver [GitHub Issues](https://github.com/anarculture/bhfashion-auto/issues) para el desglose en vertical slices listos para implementar.
+
+---
+
 *Preparado por: Mau Dávila-Barbe / colectivo htmk://*
