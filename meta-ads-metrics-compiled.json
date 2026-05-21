@@ -1,0 +1,461 @@
+{
+  "id": "mEtRiCs-BHf-01",
+  "name": "meta-ads-metrics",
+  "active": true,
+  "nodes": [
+    {
+      "id": "schedule-metrics",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 12 * * *"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "0 0 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "global-vars",
+      "name": "Variables Globales",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "acc-id",
+              "name": "ad_account_id",
+              "type": "string",
+              "value": "988429123910411"
+            },
+            {
+              "id": "api-v",
+              "name": "api_version",
+              "type": "string",
+              "value": "v25.0"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "postgres-get-ads",
+      "name": "Get Active Ads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        400,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zRsMDLm7WeomuzE3",
+          "name": "Postgres BH Fashion"
+        }
+      },
+      "parameters": {
+        "options": {},
+        "operation": "executeQuery",
+        "query": "SELECT ad_id FROM deployments WHERE estado = 'Desplegado' AND ad_id IS NOT NULL;"
+      }
+    },
+    {
+      "id": "if-has-ads",
+      "name": "IF Hay Ads Activos",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-ads-cond",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "noop-sin-ads",
+      "name": "Sin Ads Activos",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        800,
+        200
+      ]
+    },
+    {
+      "id": "split-ads",
+      "name": "Split Ads",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        800,
+        -200
+      ],
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      }
+    },
+    {
+      "id": "prep-request",
+      "name": "Preparar Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        -200
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({\n  json: {\n    ad_id: item.json.ad_id,\n    captured_at: new Date().toISOString(),\n    api_version: $('Variables Globales').first().json.api_version\n  }\n}));"
+      }
+    },
+    {
+      "id": "http-insights-today",
+      "name": "Meta Insights TODAY",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        -350
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "AQ2tmf94MUYVp0JI",
+          "name": "Bearer Auth account"
+        }
+      },
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "method": "GET",
+        "url": "=https://graph.facebook.com/{{ $json.api_version }}/{{ $json.ad_id }}/insights",
+        "sendQueryParameters": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "spend,impressions,inline_link_clicks,actions,action_values,frequency,reach"
+            },
+            {
+              "name": "date_preset",
+              "value": "today"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "normalize-today",
+      "name": "Normalizar Today",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        -350
+      ],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst orig = $('Preparar Request').item.json;\n\nconst insights = (raw.data && raw.data[0]) ? raw.data[0] : {};\nconst actions = insights.actions || [];\nconst actionValues = insights.action_values || [];\n\nconst purchaseCount = actions.find(a => a.action_type === 'purchase');\nconst purchaseValue = actionValues.find(a => a.action_type === 'purchase');\n\nreturn {\n  json: {\n    ad_id: orig.ad_id,\n    captured_at: orig.captured_at,\n    window: 'today',\n    spend: parseFloat(insights.spend || 0),\n    impressions: parseInt(insights.impressions || 0),\n    inline_link_clicks: parseInt(insights.inline_link_clicks || 0),\n    purchases_count: purchaseCount ? parseInt(purchaseCount.value) : 0,\n    purchases_value: purchaseValue ? parseFloat(purchaseValue.value) : 0,\n    frequency: parseFloat(insights.frequency || 0),\n    reach: parseInt(insights.reach || 0),\n    raw_insights: raw.error ? { error: raw.error.message || 'Meta API error' } : raw\n  }\n};"
+      }
+    },
+    {
+      "id": "postgres-insert-today",
+      "name": "Insert Snapshot TODAY",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1600,
+        -350
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zRsMDLm7WeomuzE3",
+          "name": "Postgres BH Fashion"
+        }
+      },
+      "parameters": {
+        "options": {},
+        "operation": "executeQuery",
+        "query": "INSERT INTO metrics_snapshots\n  (ad_id, captured_at, \"window\", spend, impressions, inline_link_clicks,\n   purchases_count, purchases_value, frequency, reach, raw_insights)\nVALUES (\n  '{{ $json.ad_id }}',\n  '{{ $json.captured_at }}',\n  '{{ $json.window }}',\n  {{ $json.spend }},\n  {{ $json.impressions }},\n  {{ $json.inline_link_clicks }},\n  {{ $json.purchases_count }},\n  {{ $json.purchases_value }},\n  {{ $json.frequency }},\n  {{ $json.reach }},\n  '{{ JSON.stringify($json.raw_insights).replace(/'/g, \"''\") }}'::jsonb\n)\nON CONFLICT (ad_id, captured_at, \"window\") DO NOTHING;"
+      }
+    },
+    {
+      "id": "http-insights-7d",
+      "name": "Meta Insights LAST_7D",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        -50
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "AQ2tmf94MUYVp0JI",
+          "name": "Bearer Auth account"
+        }
+      },
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "method": "GET",
+        "url": "=https://graph.facebook.com/{{ $json.api_version }}/{{ $json.ad_id }}/insights",
+        "sendQueryParameters": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "spend,impressions,inline_link_clicks,actions,action_values,frequency,reach"
+            },
+            {
+              "name": "date_preset",
+              "value": "last_7d"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "normalize-7d",
+      "name": "Normalizar Last7d",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        -50
+      ],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst orig = $('Preparar Request').item.json;\n\nconst insights = (raw.data && raw.data[0]) ? raw.data[0] : {};\nconst actions = insights.actions || [];\nconst actionValues = insights.action_values || [];\n\nconst purchaseCount = actions.find(a => a.action_type === 'purchase');\nconst purchaseValue = actionValues.find(a => a.action_type === 'purchase');\n\nreturn {\n  json: {\n    ad_id: orig.ad_id,\n    captured_at: orig.captured_at,\n    window: 'last_7d',\n    spend: parseFloat(insights.spend || 0),\n    impressions: parseInt(insights.impressions || 0),\n    inline_link_clicks: parseInt(insights.inline_link_clicks || 0),\n    purchases_count: purchaseCount ? parseInt(purchaseCount.value) : 0,\n    purchases_value: purchaseValue ? parseFloat(purchaseValue.value) : 0,\n    frequency: parseFloat(insights.frequency || 0),\n    reach: parseInt(insights.reach || 0),\n    raw_insights: raw.error ? { error: raw.error.message || 'Meta API error' } : raw\n  }\n};"
+      }
+    },
+    {
+      "id": "postgres-insert-7d",
+      "name": "Insert Snapshot LAST_7D",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1600,
+        -50
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zRsMDLm7WeomuzE3",
+          "name": "Postgres BH Fashion"
+        }
+      },
+      "parameters": {
+        "options": {},
+        "operation": "executeQuery",
+        "query": "INSERT INTO metrics_snapshots\n  (ad_id, captured_at, \"window\", spend, impressions, inline_link_clicks,\n   purchases_count, purchases_value, frequency, reach, raw_insights)\nVALUES (\n  '{{ $json.ad_id }}',\n  '{{ $json.captured_at }}',\n  '{{ $json.window }}',\n  {{ $json.spend }},\n  {{ $json.impressions }},\n  {{ $json.inline_link_clicks }},\n  {{ $json.purchases_count }},\n  {{ $json.purchases_value }},\n  {{ $json.frequency }},\n  {{ $json.reach }},\n  '{{ JSON.stringify($json.raw_insights).replace(/'/g, \"''\") }}'::jsonb\n)\nON CONFLICT (ad_id, captured_at, \"window\") DO NOTHING;"
+      }
+    },
+    {
+      "id": "ad-completed",
+      "name": "Ad Completado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        -200
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Variables Globales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Variables Globales": {
+      "main": [
+        [
+          {
+            "node": "Get Active Ads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Ads": {
+      "main": [
+        [
+          {
+            "node": "IF Hay Ads Activos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Hay Ads Activos": {
+      "main": [
+        [
+          {
+            "node": "Split Ads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sin Ads Activos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Ads": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Preparar Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Request": {
+      "main": [
+        [
+          {
+            "node": "Meta Insights TODAY",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Meta Insights LAST_7D",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meta Insights TODAY": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Today": {
+      "main": [
+        [
+          {
+            "node": "Insert Snapshot TODAY",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Snapshot TODAY": {
+      "main": [
+        [
+          {
+            "node": "Ad Completado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meta Insights LAST_7D": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Last7d",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Last7d": {
+      "main": [
+        [
+          {
+            "node": "Insert Snapshot LAST_7D",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Snapshot LAST_7D": {
+      "main": [
+        [
+          {
+            "node": "Ad Completado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ad Completado": {
+      "main": [
+        [
+          {
+            "node": "Split Ads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
