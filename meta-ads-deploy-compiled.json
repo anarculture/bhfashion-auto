@@ -4,7 +4,7 @@
   "active": true,
   "nodes": [
     {
-      "id": "webhook-echo-01",
+      "id": "webhook-deploy",
       "name": "Webhook Deploy",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -21,8 +21,8 @@
       "webhookId": "f6fdd7ac-d903-488e-82c0-776b2d883919"
     },
     {
-      "id": "code-echo-02",
-      "name": "Preparar Fila",
+      "id": "prep-payload",
+      "name": "Preparar Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -30,87 +30,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// Extrae la primera fila del payload del webhook\nconst body = $input.first().json.body;\n\nif (!body || !body.filas || !Array.isArray(body.filas) || body.filas.length === 0) {\n  throw new Error('Payload inválido: se requiere body.filas como array no vacío');\n}\n\nconst spreadsheetId = body.spreadsheet_id || 'unknown';\nconst fila = body.filas[0];\n\n// Validar campos requeridos\nconst required = ['campaña', 'ig_post_url', 'presupuesto_diario', 'fecha_inicio', 'fecha_fin', 'audiencia'];\nconst missing = required.filter(f => !fila[f] && fila[f] !== 0);\nif (missing.length > 0) {\n  throw new Error('Campos faltantes: ' + missing.join(', '));\n}\n\nreturn {\n  json: {\n    campaña: fila.campaña,\n    ig_post_url: fila.ig_post_url,\n    presupuesto_diario: Number(fila.presupuesto_diario),\n    fecha_inicio: fila.fecha_inicio,\n    fecha_fin: fila.fecha_fin,\n    audiencia: fila.audiencia,\n    placements: fila.placements || 'automatic',\n    fila_sheets: fila.fila_sheets || null,\n    spreadsheet_id: spreadsheetId\n  }\n};"
-      }
-    },
-    {
-      "id": "postgres-echo-03",
-      "name": "Insert Postgres",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        400,
-        0
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "zRsMDLm7WeomuzE3",
-          "name": "Postgres BH Fashion"
-        }
-      },
-      "parameters": {
-        "options": {},
-        "operation": "executeQuery",
-        "query": "INSERT INTO deployments (campaña, ig_post_url, presupuesto_diario, fecha_inicio, fecha_fin, audiencia, placements, fila_sheets, spreadsheet_id, estado)\nVALUES ('{{ $json.campaña }}', '{{ $json.ig_post_url }}', {{ $json.presupuesto_diario }}, '{{ $json.fecha_inicio }}', '{{ $json.fecha_fin }}', '{{ $json.audiencia }}', '{{ $json.placements }}', {{ $json.fila_sheets || 'NULL' }}, '{{ $json.spreadsheet_id }}', 'Pendiente')\nRETURNING id, campaña, ig_post_url, presupuesto_diario, fecha_inicio, fecha_fin, audiencia, placements, fila_sheets, spreadsheet_id, estado, created_at;"
-      }
-    },
-    {
-      "id": "postgres-claim-04",
-      "name": "Claim Postgres",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        600,
-        0
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "zRsMDLm7WeomuzE3",
-          "name": "Postgres BH Fashion"
-        }
-      },
-      "parameters": {
-        "options": {},
-        "operation": "executeQuery",
-        "query": "UPDATE deployments SET estado = 'Desplegando' WHERE estado = 'Pendiente' AND id = {{ $json.id }} RETURNING *;"
-      }
-    },
-    {
-      "id": "if-claimed-05",
-      "name": "Check Claimed",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        800,
-        0
-      ],
-      "parameters": {
-        "conditions": {
-          "number": [
-            {
-              "value1": "={{ $input.all().length }}",
-              "operation": "larger",
-              "value2": 0
-            }
-          ]
-        }
-      }
-    },
-    {
-      "id": "respond-already-processing-06",
-      "name": "Respond Already Processing",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        800,
-        250
-      ],
-      "parameters": {
-        "options": {
-          "responseCode": 200
-        },
-        "respondWith": "json",
-        "responseBody": "{\n  \"status\": \"ignored\",\n  \"message\": \"Fila ya en proceso o desplegada.\"\n}"
+        "jsCode": "const body = $input.first().json.body;\nif (!body || !body.filas || !Array.isArray(body.filas) || body.filas.length === 0) {\n  throw new Error('Payload inválido: se requiere body.filas como array no vacío');\n}\nreturn {\n  json: {\n    spreadsheet_id: body.spreadsheet_id || 'unknown',\n    filas: body.filas\n  }\n};"
       }
     },
     {
@@ -119,8 +39,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1000,
-        -100
+        400,
+        0
       ],
       "parameters": {
         "assignments": {
@@ -155,8 +75,8 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        1200,
-        -100
+        600,
+        0
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -168,7 +88,7 @@
         "operation": "read",
         "documentId": {
           "__rl": true,
-          "value": "={{ $('Claim Postgres').first().json.spreadsheet_id }}",
+          "value": "={{ $('Preparar Payload').first().json.spreadsheet_id }}",
           "mode": "id"
         },
         "sheetName": {
@@ -185,8 +105,8 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        1400,
-        -100
+        800,
+        0
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -198,7 +118,7 @@
         "operation": "read",
         "documentId": {
           "__rl": true,
-          "value": "={{ $('Claim Postgres').first().json.spreadsheet_id }}",
+          "value": "={{ $('Preparar Payload').first().json.spreadsheet_id }}",
           "mode": "id"
         },
         "sheetName": {
@@ -210,28 +130,41 @@
       }
     },
     {
-      "id": "code-resolve-09",
-      "name": "Resolve Config",
+      "id": "extraer-campanas",
+      "name": "Extraer Campañas Únicas",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1600,
-        -100
+        1000,
+        0
       ],
       "parameters": {
-        "jsCode": "const deploy = $('Claim Postgres').first().json;\nconst campanas = $('Read Campañas Sheet').all().map(i => i.json);\nconst audiencias = $('Read Audiencias Sheet').all().map(i => i.json);\n\nconst campanaConfig = campanas.find(c => c.nombre === deploy.campaña);\nif (!campanaConfig) {\n  throw new Error('Configuración de campaña no encontrada en hoja Campañas para: ' + deploy.campaña);\n}\n\nconst audienciaConfig = audiencias.find(a => a.alias === deploy.audiencia);\nif (!audienciaConfig) {\n  throw new Error('Audiencia no encontrada en hoja Audiencias para: ' + deploy.audiencia);\n}\n\nreturn {\n  json: {\n    ...deploy,\n    objective: campanaConfig.objective || 'OUTCOME_SALES',\n    special_ad_categories: JSON.parse(campanaConfig.special_ad_categories || '[]'),\n    meta_audience_id: audienciaConfig.meta_audience_id,\n    audience_type: audienciaConfig.tipo || 'custom'\n  }\n};"
+        "jsCode": "const payload = $('Preparar Payload').first().json;\nconst campanas = [...new Set(payload.filas.map(f => f.campaña).filter(Boolean))];\nreturn campanas.map(c => ({ json: { campaña: c } }));"
       }
     },
     {
-      "id": "postgres-cache-lookup-10",
-      "name": "Postgres Campaign Cache Lookup",
+      "id": "split-campanas",
+      "name": "Split Campaigns",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "postgres-camp-lookup",
+      "name": "Lookup PG Cache",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        1800,
-        -100
+        1400,
+        100
       ],
-      "alwaysOutputData": true,
       "credentials": {
         "postgres": {
           "id": "zRsMDLm7WeomuzE3",
@@ -245,13 +178,13 @@
       }
     },
     {
-      "id": "if-campaign-cached-11",
-      "name": "IF Campaign Cached",
+      "id": "if-pg-cached",
+      "name": "IF Cached",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
+      "typeVersion": 1,
       "position": [
-        2000,
-        -100
+        1600,
+        100
       ],
       "parameters": {
         "conditions": {
@@ -265,13 +198,13 @@
       }
     },
     {
-      "id": "meta-campaign-lookup-12",
+      "id": "meta-camp-lookup",
       "name": "Meta Campaign Lookup",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2200,
-        100
+        1800,
+        200
       ],
       "credentials": {
         "httpBearerAuth": {
@@ -293,7 +226,7 @@
             },
             {
               "name": "filtering",
-              "value": "=[{\"field\":\"name\",\"operator\":\"EQUAL\",\"value\":\"{{ $('Resolve Config').first().json.campaña }}\"}]"
+              "value": "=[{\"field\":\"name\",\"operator\":\"EQUAL\",\"value\":\"{{ $('Split Campaigns').first().json.campaña }}\"}]"
             }
           ]
         },
@@ -301,13 +234,13 @@
       }
     },
     {
-      "id": "if-campaign-found-meta-13",
-      "name": "IF Campaign Found in Meta",
+      "id": "if-meta-found",
+      "name": "IF Found in Meta",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
+      "typeVersion": 1,
       "position": [
-        2400,
-        100
+        2000,
+        200
       ],
       "parameters": {
         "conditions": {
@@ -322,13 +255,26 @@
       }
     },
     {
-      "id": "meta-create-campaign-14",
+      "id": "resolve-objective",
+      "name": "Resolve Objective",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const campanaName = $('Split Campaigns').first().json.campaña;\nconst campanasConfig = $('Read Campñas Sheet').all().map(i => i.json);\nconst config = campanasConfig.find(c => c.nombre && String(c.nombre).trim() === String(campanaName).trim());\nreturn {\n  json: {\n    campaña: campanaName,\n    objective: config ? (config.objective || 'OUTCOME_SALES') : 'OUTCOME_SALES',\n    special_ad_categories: config ? JSON.parse(config.special_ad_categories || '[]') : []\n  }\n};"
+      }
+    },
+    {
+      "id": "meta-create-campaign",
       "name": "Meta Create Campaign",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2600,
-        250
+        2400,
+        300
       ],
       "credentials": {
         "httpBearerAuth": {
@@ -343,18 +289,18 @@
         "url": "=https://graph.facebook.com/{{ $('Variables Globales').first().json.api_version }}/act_{{ $('Variables Globales').first().json.ad_account_id }}/campaigns",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"name\": \"{{ $('Resolve Config').first().json.campaña }}\",\n  \"objective\": \"{{ $('Resolve Config').first().json.objective }}\",\n  \"status\": \"PAUSED\",\n  \"special_ad_categories\": {{ JSON.stringify($('Resolve Config').first().json.special_ad_categories) }}\n}",
+        "jsonBody": "={\n  \"name\": \"{{ $json.campaña }}\",\n  \"objective\": \"{{ $json.objective }}\",\n  \"status\": \"PAUSED\",\n  \"special_ad_categories\": {{ JSON.stringify($json.special_ad_categories) }}\n}",
         "options": {}
       }
     },
     {
-      "id": "postgres-cache-campaign-15",
+      "id": "postgres-cache-camp",
       "name": "Postgres Cache Campaign",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        2800,
-        100
+        2600,
+        200
       ],
       "credentials": {
         "postgres": {
@@ -365,17 +311,387 @@
       "parameters": {
         "options": {},
         "operation": "executeQuery",
-        "query": "INSERT INTO campaigns_meta (nombre, campaign_id, objective)\nVALUES (\n  '{{ $('Resolve Config').first().json.campaña }}', \n  '{{ $node[\"Meta Create Campaign\"]?.json?.id || $node[\"Meta Campaign Lookup\"]?.json?.data?.[0]?.id }}', \n  '{{ $('Resolve Config').first().json.objective }}'\n)\nON CONFLICT (nombre) DO UPDATE SET campaign_id = EXCLUDED.campaign_id\nRETURNING campaign_id;"
+        "query": "INSERT INTO campaigns_meta (nombre, campaign_id, objective)\nVALUES (\n  '{{ $('Split Campaigns').first().json.campaña.replace(/'/g, \"''\") }}', \n  '{{ $node[\"Meta Create Campaign\"]?.json?.id || $node[\"Meta Campaign Lookup\"]?.json?.data?.[0]?.id }}', \n  '{{ $('Resolve Objective').first().json?.objective || $('Meta Campaign Lookup').first().json?.data?.[0]?.objective || \"OUTCOME_SALES\" }}'\n)\nON CONFLICT (nombre) DO UPDATE SET campaign_id = EXCLUDED.campaign_id\nRETURNING campaign_id;"
       }
     },
     {
-      "id": "meta-create-adset-16",
+      "id": "camp-resolved",
+      "name": "Campaign Resolved",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2800,
+        100
+      ]
+    },
+    {
+      "id": "prep-rows-deploy",
+      "name": "Preparar Filas Deploy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        -300
+      ],
+      "parameters": {
+        "jsCode": "const payload = $('Preparar Payload').first().json;\nreturn payload.filas.map(fila => ({\n  json: {\n    campaña: fila.campaña || null,\n    ig_post_url: fila.ig_post_url || null,\n    presupuesto_diario: fila.presupuesto_diario !== undefined ? Number(fila.presupuesto_diario) : null,\n    fecha_inicio: fila.fecha_inicio || null,\n    fecha_fin: fila.fecha_fin || null,\n    audiencia: fila.audiencia || null,\n    placements: fila.placements || 'automatic',\n    fila_sheets: fila.fila_sheets || null,\n    spreadsheet_id: payload.spreadsheet_id\n  }\n}));"
+      }
+    },
+    {
+      "id": "split-rows",
+      "name": "Split Rows",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1600,
+        -300
+      ],
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      }
+    },
+    {
+      "id": "validar-local-fks",
+      "name": "Validar Local y FKs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        -300
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst campanas = $('Read Campñas Sheet').all().map(i => i.json);\nconst audiencias = $('Read Audiencias Sheet').all().map(i => i.json);\n\nreturn items.map(item => {\n  const deploy = item.json;\n  \n  // 1. Validar campos requeridos\n  const required = ['campaña', 'ig_post_url', 'presupuesto_diario', 'fecha_inicio', 'fecha_fin', 'audiencia'];\n  const missing = required.filter(f => !deploy[f] && deploy[f] !== 0);\n  if (missing.length > 0) {\n    return { json: { ...deploy, isValid: false, error_message: 'Campos requeridos faltantes: ' + missing.join(', ') } };\n  }\n  \n  // 2. Validar formato de URL de Instagram\n  const igUrlRegex = /^https?:\\/\\/(?:www\\.)?instagram\\.com\\/(?:p|reel|tv)\\/([A-Za-z0-9-_]+)/i;\n  const urlMatch = deploy.ig_post_url.match(igUrlRegex);\n  if (!urlMatch) {\n    return { json: { ...deploy, isValid: false, error_message: 'URL de Instagram inválida. Debe contener /p/, /reel/ o /tv/ y un shortcode válido' } };\n  }\n  const shortcode = urlMatch[1];\n  \n  // 3. Validar rango de presupuesto diario\n  if (isNaN(deploy.presupuesto_diario) || deploy.presupuesto_diario <= 0) {\n    return { json: { ...deploy, isValid: false, error_message: 'El presupuesto diario debe ser un número mayor a 0' } };\n  }\n  \n  // 4. Validar rango de fechas\n  const dateStart = new Date(deploy.fecha_inicio);\n  const dateEnd = new Date(deploy.fecha_fin);\n  if (isNaN(dateStart.getTime()) || isNaN(dateEnd.getTime())) {\n    return { json: { ...deploy, isValid: false, error_message: 'Formato de fecha de inicio o fin inválido' } };\n  }\n  if (dateStart > dateEnd) {\n    return { json: { ...deploy, isValid: false, error_message: 'La fecha de inicio no puede ser posterior a la fecha de fin' } };\n  }\n  \n  // 5. Validar FK Campañas\n  const campanaConfig = campanas.find(c => c.nombre && String(c.nombre).trim() === String(deploy.campaña).trim());\n  if (!campanaConfig) {\n    return { json: { ...deploy, isValid: false, error_message: 'Campaña no encontrada en la hoja Campañas: ' + deploy.campaña } };\n  }\n  \n  // 6. Validar FK Audiencias\n  const audienciaConfig = audiencias.find(a => a.alias && String(a.alias).trim() === String(deploy.audiencia).trim());\n  if (!audienciaConfig) {\n    return { json: { ...deploy, isValid: false, error_message: 'Audiencia no encontrada en la hoja Audiencias: ' + deploy.audiencia } };\n  }\n  \n  // Decodificar shortcode a ig_media_id (usando BigInt para evitar overflow)\n  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';\n  let mediaId = BigInt(0);\n  for (let i = 0; i < shortcode.length; i++) {\n    let char = shortcode[i];\n    let value = BigInt(alphabet.indexOf(char));\n    mediaId = (mediaId * BigInt(64)) + value;\n  }\n  \n  return {\n    json: {\n      ...deploy,\n      isValid: true,\n      ig_media_id: mediaId.toString(),\n      shortcode: shortcode\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "if-row-valid",
+      "name": "IF Row Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        -300
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isValid }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "format-local-error",
+      "name": "Format Local Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json } }));"
+      }
+    },
+    {
+      "id": "verify-ig-post",
+      "name": "Verify IG Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        -450
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "AQ2tmf94MUYVp0JI",
+          "name": "Bearer Auth account"
+        }
+      },
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "method": "GET",
+        "url": "=https://graph.facebook.com/{{ $('Variables Globales').first().json.api_version }}/{{ $json.ig_media_id }}?fields=id",
+        "options": {}
+      }
+    },
+    {
+      "id": "merge-ig-verify",
+      "name": "Merge IG Verify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        -450
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const orig = $('Validar Local y FKs').item;\n  let isExists = false;\n  let errMsg = null;\n  if (item.json && item.json.id) {\n    isExists = true;\n  } else if (item.json && item.json.error) {\n    errMsg = 'Error Meta API: ' + (item.json.error.message || 'Desconocido');\n  } else {\n    errMsg = 'Post de Instagram no encontrado o no accesible';\n  }\n  return {\n    json: {\n      ...orig.json,\n      ig_exists: isExists,\n      error_message: errMsg\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "if-ig-exists",
+      "name": "IF IG Post Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2600,
+        -450
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ig_exists }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "format-ig-error",
+      "name": "Format IG Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        -300
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json } }));"
+      }
+    },
+    {
+      "id": "postgres-insert-error",
+      "name": "Postgres Insert Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3000,
+        -200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zRsMDLm7WeomuzE3",
+          "name": "Postgres BH Fashion"
+        }
+      },
+      "parameters": {
+        "options": {},
+        "operation": "executeQuery",
+        "query": "INSERT INTO deployments (campaña, ig_post_url, presupuesto_diario, fecha_inicio, fecha_fin, audiencia, placements, fila_sheets, spreadsheet_id, estado, error_log)\nVALUES (\n  '{{ $json.campaña.replace(/'/g, \"''\") }}', \n  '{{ $json.ig_post_url.replace(/'/g, \"''\") }}', \n  {{ $json.presupuesto_diario || 0 }}, \n  '{{ $json.fecha_inicio }}', \n  '{{ $json.fecha_fin }}', \n  '{{ $json.audiencia.replace(/'/g, \"''\") }}', \n  '{{ $json.placements }}', \n  {{ $json.fila_sheets || 'NULL' }}, \n  '{{ $json.spreadsheet_id }}', \n  'Error', \n  '{{ $json.error_message ? $json.error_message.replace(/'/g, \"''\") : \"Error desconocido\" }}'\n)\nRETURNING id, error_log AS error_message, spreadsheet_id, fila_sheets AS row_number;"
+      }
+    },
+    {
+      "id": "sheets-sync-error",
+      "name": "Google Sheets Sync Error",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3200,
+        -200
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7dlWSVzJGL0kxmq1",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Deploys",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "row_number"
+          ],
+          "value": {
+            "Estado": "Error",
+            "error_log": "={{ $json.error_message }}",
+            "row_number": "={{ $json.row_number }}"
+          },
+          "schema": [
+            {
+              "id": "row_number",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "readOnly": true,
+              "displayName": "row_number",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "displayName": "Estado",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "error_log",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "displayName": "error_log",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "postgres-insert-pending",
+      "name": "Insert Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2800,
+        -600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zRsMDLm7WeomuzE3",
+          "name": "Postgres BH Fashion"
+        }
+      },
+      "parameters": {
+        "options": {},
+        "operation": "executeQuery",
+        "query": "INSERT INTO deployments (campaña, ig_post_url, presupuesto_diario, fecha_inicio, fecha_fin, audiencia, placements, fila_sheets, spreadsheet_id, estado)\nVALUES (\n  '{{ $json.campaña.replace(/'/g, \"''\") }}',\n  '{{ $json.ig_post_url }}',\n  {{ $json.presupuesto_diario }},\n  '{{ $json.fecha_inicio }}',\n  '{{ $json.fecha_fin }}',\n  '{{ $json.audiencia.replace(/'/g, \"''\") }}',\n  '{{ $json.placements }}',\n  {{ $json.fila_sheets || 'NULL' }},\n  '{{ $json.spreadsheet_id }}',\n  'Pendiente'\n)\nRETURNING id, campaña, ig_post_url, presupuesto_diario, fecha_inicio, fecha_fin, audiencia, placements, fila_sheets, spreadsheet_id, estado, created_at;"
+      }
+    },
+    {
+      "id": "postgres-claim-deploying",
+      "name": "Claim Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3000,
+        -600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zRsMDLm7WeomuzE3",
+          "name": "Postgres BH Fashion"
+        }
+      },
+      "parameters": {
+        "options": {},
+        "operation": "executeQuery",
+        "query": "UPDATE deployments SET estado = 'Desplegando' WHERE estado = 'Pendiente' AND id = {{ $json.id }} RETURNING *;"
+      }
+    },
+    {
+      "id": "if-claimed",
+      "name": "Check Claimed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3200,
+        -600
+      ],
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $input.all().length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "resolve-config",
+      "name": "Resolve Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        -600
+      ],
+      "parameters": {
+        "jsCode": "const deploy = $input.first().json;\nconst campanas = $('Read Campñas Sheet').all().map(i => i.json);\nconst audiencias = $('Read Audiencias Sheet').all().map(i => i.json);\n\nconst campanaConfig = campanas.find(c => c.nombre === deploy.campaña);\nif (!campanaConfig) {\n  throw new Error('Configuración de campaña no encontrada en hoja Campañas para: ' + deploy.campaña);\n}\n\nconst audienciaConfig = audiencias.find(a => a.alias === deploy.audiencia);\nif (!audienciaConfig) {\n  throw new Error('Audiencia no encontrada en hoja Audiencias para: ' + deploy.audiencia);\n}\n\nreturn {\n  json: {\n    ...deploy,\n    objective: campanaConfig.objective || 'OUTCOME_SALES',\n    special_ad_categories: JSON.parse(campanaConfig.special_ad_categories || '[]'),\n    meta_audience_id: audienciaConfig.meta_audience_id,\n    audience_type: audienciaConfig.tipo || 'custom'\n  }\n};"
+      }
+    },
+    {
+      "id": "postgres-camp-id-lookup",
+      "name": "Lookup Campaign ID Cache",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3600,
+        -600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zRsMDLm7WeomuzE3",
+          "name": "Postgres BH Fashion"
+        }
+      },
+      "parameters": {
+        "options": {},
+        "operation": "executeQuery",
+        "query": "SELECT campaign_id FROM campaigns_meta WHERE nombre = '{{ $json.campaña }}';"
+      }
+    },
+    {
+      "id": "merge-camp-id",
+      "name": "Merge Campaign ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3800,
+        -600
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const orig = $('Resolve Config').item;\n  return {\n    json: {\n      ...orig.json,\n      campaign_id: item.json.campaign_id\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "prep-adset-input",
+      "name": "Prepare AdSet Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4000,
+        -600
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nreturn {\n  json: {\n    ...input,\n    retries: input.retries !== undefined ? input.retries : 0\n  }\n};"
+      }
+    },
+    {
+      "id": "http-create-adset",
       "name": "Meta Create AdSet",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3000,
-        -100
+        4200,
+        -600
       ],
       "continueOnFail": true,
       "credentials": {
@@ -391,18 +707,133 @@
         "url": "=https://graph.facebook.com/{{ $('Variables Globales').first().json.api_version }}/act_{{ $('Variables Globales').first().json.ad_account_id }}/adsets",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"name\": \"{{ $('Resolve Config').first().json.campaña }} - AdSet\",\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"daily_budget\": {{ Math.round($('Resolve Config').first().json.presupuesto_diario * 100) }},\n  \"billing_event\": \"IMPRESSIONS\",\n  \"optimization_goal\": \"IMPRESSIONS\",\n  \"bid_strategy\": \"LOWEST_COST_WITHOUT_CAP\",\n  \"targeting\": {{ JSON.stringify((() => { const audId = $('Resolve Config').first().json.meta_audience_id; const isDummy = !audId || String(audId).length < 12 || audId === '123456789' || audId === 123456789; if (isDummy) return { 'geo_locations': { 'countries': ['VE'] } }; return $('Resolve Config').first().json.audience_type === 'saved' ? { 'saved_audience_id': audId } : { 'custom_audiences': [{ 'id': audId }], 'geo_locations': { 'countries': ['VE'] } }; })()) }},\n  \"start_time\": \"{{ $('Resolve Config').first().json.fecha_inicio.substring(0, 10) }}T09:00:00-04:00\",\n  \"end_time\": \"{{ $('Resolve Config').first().json.fecha_fin.substring(0, 10) }}T23:59:59-04:00\",\n  \"status\": \"ACTIVE\"\n}",
+        "jsonBody": "={\n  \"name\": \"{{ $json.campaña }} - AdSet\",\n  \"campaign_id\": \"{{ $json.campaign_id }}\",\n  \"daily_budget\": {{ Math.round($json.presupuesto_diario * 100) }},\n  \"billing_event\": \"IMPRESSIONS\",\n  \"optimization_goal\": \"IMPRESSIONS\",\n  \"bid_strategy\": \"LOWEST_COST_WITHOUT_CAP\",\n  \"targeting\": {{ JSON.stringify((() => { const audId = $json.meta_audience_id; const isDummy = !audId || String(audId).length < 12 || audId === '123456789' || audId === 123456789; if (isDummy) return { 'geo_locations': { 'countries': ['VE'] } }; return $json.audience_type === 'saved' ? { 'saved_audience_id': audId } : { 'custom_audiences': [{ 'id': audId }], 'geo_locations': { 'countries': ['VE'] } }; })()) }},\n  \"start_time\": \"{{ $json.fecha_inicio.substring(0, 10) }}T09:00:00-04:00\",\n  \"end_time\": \"{{ $json.fecha_fin.substring(0, 10) }}T23:59:59-04:00\",\n  \"status\": \"ACTIVE\"\n}",
         "options": {}
       }
     },
     {
-      "id": "meta-create-creative-17",
-      "name": "Meta Create AdCreative",
+      "id": "check-adset-success",
+      "name": "Check AdSet Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        4400,
+        -600
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "check-adset-ratelimit",
+      "name": "Is AdSet Rate Limit Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        4400,
+        -400
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.error && ($json.error.code === 17 || $json.error.code === 32) }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "inc-adset-retry",
+      "name": "Increment AdSet Retry Count",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4600,
+        -400
+      ],
+      "parameters": {
+        "jsCode": "const errorResp = $input.first().json;\nconst prevInput = $('Prepare AdSet Input').item.json;\nconst newRetries = (prevInput.retries || 0) + 1;\nconst maxTries = 3;\n\nif (newRetries <= maxTries) {\n  const backoff = 30 * Math.pow(2, newRetries - 1);\n  return {\n    json: {\n      ...prevInput,\n      retries: newRetries,\n      backoff_seconds: backoff,\n      retry: true\n    }\n  };\n} else {\n  return {\n    json: {\n      ...prevInput,\n      retry: false,\n      error_message: 'Meta API Rate Limit Exceeded (3 attempts): ' + (errorResp.error ? errorResp.error.message : 'Desconocido')\n    }\n  };}"
+      }
+    },
+    {
+      "id": "should-adset-retry",
+      "name": "Should AdSet Retry",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        4800,
+        -400
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.retry }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wait-adset",
+      "name": "Wait AdSet",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4600,
+        -250
+      ],
+      "parameters": {
+        "amount": "={{ $json.backoff_seconds }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "format-adset-error",
+      "name": "Format AdSet Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4600,
+        -550
+      ],
+      "parameters": {
+        "jsCode": "const err = $input.first().json;\nconst msg = err.error_message || (err.error ? err.error.message : 'Error desconocido de Meta API');\nreturn {\n  json: {\n    ...$('Prepare AdSet Input').item.json,\n    error_message: msg\n  }\n};"
+      }
+    },
+    {
+      "id": "prep-creative-input",
+      "name": "Prepare Creative Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5000,
+        -600
+      ],
+      "parameters": {
+        "jsCode": "const adsetResp = $input.first().json;\nconst orig = $('Prepare AdSet Input').item.json;\nreturn {\n  json: {\n    ...orig,\n    adset_id: adsetResp.id,\n    retries: 0\n  }\n};"
+      }
+    },
+    {
+      "id": "http-create-creative",
+      "name": "Meta Create Creative",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3200,
-        -100
+        5200,
+        -600
       ],
       "continueOnFail": true,
       "credentials": {
@@ -418,18 +849,133 @@
         "url": "=https://graph.facebook.com/{{ $('Variables Globales').first().json.api_version }}/act_{{ $('Variables Globales').first().json.ad_account_id }}/adcreatives",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"name\": \"{{ $('Resolve Config').first().json.campaña }} - Creative\",\n  \"instagram_actor_id\": \"{{ $('Variables Globales').first().json.instagram_actor_id }}\",\n  \"instagram_permalink_url\": \"{{ $('Resolve Config').first().json.ig_post_url }}\"\n}",
+        "jsonBody": "={\n  \"name\": \"{{ $json.campaña }} - Creative\",\n  \"instagram_actor_id\": \"{{ $('Variables Globales').first().json.instagram_actor_id }}\",\n  \"instagram_permalink_url\": \"{{ $json.ig_post_url }}\"\n}",
         "options": {}
       }
     },
     {
-      "id": "meta-create-ad-18",
+      "id": "check-creative-success",
+      "name": "Check Creative Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        5400,
+        -600
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "check-creative-ratelimit",
+      "name": "Is Creative Rate Limit Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        5400,
+        -400
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.error && ($json.error.code === 17 || $json.error.code === 32) }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "inc-creative-retry",
+      "name": "Increment Creative Retry Count",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5600,
+        -400
+      ],
+      "parameters": {
+        "jsCode": "const errorResp = $input.first().json;\nconst prevInput = $('Prepare Creative Input').item.json;\nconst newRetries = (prevInput.retries || 0) + 1;\nconst maxTries = 3;\n\nif (newRetries <= maxTries) {\n  const backoff = 30 * Math.pow(2, newRetries - 1);\n  return {\n    json: {\n      ...prevInput,\n      retries: newRetries,\n      backoff_seconds: backoff,\n      retry: true\n    }\n  };\n} else {\n  return {\n    json: {\n      ...prevInput,\n      retry: false,\n      error_message: 'Meta API Rate Limit Exceeded (3 attempts): ' + (errorResp.error ? errorResp.error.message : 'Desconocido')\n    }\n  };}"
+      }
+    },
+    {
+      "id": "should-creative-retry",
+      "name": "Should Creative Retry",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        5800,
+        -400
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.retry }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wait-creative",
+      "name": "Wait Creative",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5600,
+        -250
+      ],
+      "parameters": {
+        "amount": "={{ $json.backoff_seconds }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "format-creative-error",
+      "name": "Format Creative Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5600,
+        -550
+      ],
+      "parameters": {
+        "jsCode": "const err = $input.first().json;\nconst msg = err.error_message || (err.error ? err.error.message : 'Error desconocido de Meta API');\nreturn {\n  json: {\n    ...$('Prepare Creative Input').item.json,\n    error_message: msg\n  }\n};"
+      }
+    },
+    {
+      "id": "prep-ad-input",
+      "name": "Prepare Ad Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6000,
+        -600
+      ],
+      "parameters": {
+        "jsCode": "const creativeResp = $input.first().json;\nconst orig = $('Prepare Creative Input').item.json;\nreturn {\n  json: {\n    ...orig,\n    creative_id: creativeResp.id,\n    retries: 0\n  }\n};"
+      }
+    },
+    {
+      "id": "http-create-ad",
       "name": "Meta Create Ad",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3400,
-        -100
+        6200,
+        -600
       ],
       "continueOnFail": true,
       "credentials": {
@@ -445,18 +991,120 @@
         "url": "=https://graph.facebook.com/{{ $('Variables Globales').first().json.api_version }}/act_{{ $('Variables Globales').first().json.ad_account_id }}/ads",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"name\": \"{{ $('Resolve Config').first().json.campaña }} - Ad\",\n  \"adset_id\": \"{{ $('Meta Create AdSet').first().json.id || 'mock_adset_id' }}\",\n  \"creative\": { \"creative_id\": \"{{ $('Meta Create AdCreative').first().json.id || 'mock_creative_id' }}\" },\n  \"status\": \"PAUSED\"\n}",
+        "jsonBody": "={\n  \"name\": \"{{ $json.campaña }} - Ad\",\n  \"adset_id\": \"{{ $json.adset_id }}\",\n  \"creative\": { \"creative_id\": \"{{ $json.creative_id }}\" },\n  \"status\": \"PAUSED\"\n}",
         "options": {}
       }
     },
     {
-      "id": "postgres-update-19",
-      "name": "Postgres Update Deployment",
+      "id": "check-ad-success",
+      "name": "Check Ad Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        6400,
+        -600
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "check-ad-ratelimit",
+      "name": "Is Ad Rate Limit Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        6400,
+        -400
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.error && ($json.error.code === 17 || $json.error.code === 32) }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "inc-ad-retry",
+      "name": "Increment Ad Retry Count",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6600,
+        -400
+      ],
+      "parameters": {
+        "jsCode": "const errorResp = $input.first().json;\nconst prevInput = $('Prepare Ad Input').item.json;\nconst newRetries = (prevInput.retries || 0) + 1;\nconst maxTries = 3;\n\nif (newRetries <= maxTries) {\n  const backoff = 30 * Math.pow(2, newRetries - 1);\n  return {\n    json: {\n      ...prevInput,\n      retries: newRetries,\n      backoff_seconds: backoff,\n      retry: true\n    }\n  };\n} else {\n  return {\n    json: {\n      ...prevInput,\n      retry: false,\n      error_message: 'Meta API Rate Limit Exceeded (3 attempts): ' + (errorResp.error ? errorResp.error.message : 'Desconocido')\n    }\n  };}"
+      }
+    },
+    {
+      "id": "should-ad-retry",
+      "name": "Should Ad Retry",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        6800,
+        -400
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.retry }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wait-ad",
+      "name": "Wait Ad",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        6600,
+        -250
+      ],
+      "parameters": {
+        "amount": "={{ $json.backoff_seconds }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "format-ad-error",
+      "name": "Format Ad Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6600,
+        -550
+      ],
+      "parameters": {
+        "jsCode": "const err = $input.first().json;\nconst msg = err.error_message || (err.error ? err.error.message : 'Error desconocido de Meta API');\nreturn {\n  json: {\n    ...$('Prepare Ad Input').item.json,\n    error_message: msg\n  }\n};"
+      }
+    },
+    {
+      "id": "postgres-update-error",
+      "name": "Postgres Update Error",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        3600,
-        -100
+        7000,
+        -200
       ],
       "credentials": {
         "postgres": {
@@ -467,17 +1115,38 @@
       "parameters": {
         "options": {},
         "operation": "executeQuery",
-        "query": "UPDATE deployments \nSET campaign_id = COALESCE((SELECT campaign_id FROM campaigns_meta WHERE nombre = '{{ $('Resolve Config').first().json.campaña }}'), 'mock_campaign_id'), \n    adset_id = '{{ $('Meta Create AdSet').first().json.id || 'mock_adset_id' }}', \n    ad_id = '{{ $('Meta Create Ad').first().json.id || 'mock_ad_id' }}', \n    estado = 'Desplegado', \n    desplegado_at = NOW() \nWHERE id = {{ $('Resolve Config').first().json.id }}\nRETURNING *;"
+        "query": "UPDATE deployments \nSET estado = 'Error', \n    error_log = '{{ $json.error_message ? $json.error_message.replace(/'/g, \"''\") : \"Error desconocido\" }}' \nWHERE id = {{ $json.id }}\nRETURNING id, error_log AS error_message, spreadsheet_id, fila_sheets AS row_number;"
       }
     },
     {
-      "id": "sheets-sync-output-20",
+      "id": "postgres-update-success",
+      "name": "Postgres Update Deployment",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        7000,
+        -600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "zRsMDLm7WeomuzE3",
+          "name": "Postgres BH Fashion"
+        }
+      },
+      "parameters": {
+        "options": {},
+        "operation": "executeQuery",
+        "query": "UPDATE deployments \nSET campaign_id = '{{ $json.campaign_id }}', \n    adset_id = '{{ $json.adset_id }}', \n    ad_id = '{{ $json.ad_id }}', \n    estado = 'Desplegado', \n    desplegado_at = NOW() \nWHERE id = {{ $json.id }}\nRETURNING *;"
+      }
+    },
+    {
+      "id": "sheets-sync-success",
       "name": "Google Sheets Sync Output",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        3800,
-        -100
+        7200,
+        -600
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -489,7 +1158,7 @@
         "operation": "update",
         "documentId": {
           "__rl": true,
-          "value": "={{ $('Resolve Config').first().json.spreadsheet_id }}",
+          "value": "={{ $json.spreadsheet_id }}",
           "mode": "id"
         },
         "sheetName": {
@@ -504,11 +1173,11 @@
           ],
           "value": {
             "Estado": "Desplegado",
-            "campaign_id": "={{ $('Postgres Update Deployment').first().json.campaign_id }}",
-            "adset_id": "={{ $('Postgres Update Deployment').first().json.adset_id }}",
-            "ad_id": "={{ $('Postgres Update Deployment').first().json.ad_id }}",
+            "campaign_id": "={{ $json.campaign_id }}",
+            "adset_id": "={{ $json.adset_id }}",
+            "ad_id": "={{ $json.ad_id }}",
             "desplegado_at": "={{ new Date().toISOString() }}",
-            "row_number": "={{ $('Resolve Config').first().json.fila_sheets }}"
+            "row_number": "={{ $json.fila_sheets }}"
           },
           "schema": [
             {
@@ -517,7 +1186,6 @@
               "display": true,
               "removed": false,
               "readOnly": true,
-              "required": false,
               "displayName": "row_number",
               "defaultMatch": false,
               "canBeUsedToMatch": true
@@ -527,7 +1195,6 @@
               "type": "string",
               "display": true,
               "removed": false,
-              "required": false,
               "displayName": "Estado",
               "defaultMatch": false,
               "canBeUsedToMatch": false
@@ -537,7 +1204,6 @@
               "type": "string",
               "display": true,
               "removed": false,
-              "required": false,
               "displayName": "campaign_id",
               "defaultMatch": false,
               "canBeUsedToMatch": false
@@ -547,7 +1213,6 @@
               "type": "string",
               "display": true,
               "removed": false,
-              "required": false,
               "displayName": "adset_id",
               "defaultMatch": false,
               "canBeUsedToMatch": false
@@ -557,7 +1222,6 @@
               "type": "string",
               "display": true,
               "removed": false,
-              "required": false,
               "displayName": "ad_id",
               "defaultMatch": false,
               "canBeUsedToMatch": false
@@ -567,7 +1231,6 @@
               "type": "string",
               "display": true,
               "removed": false,
-              "required": false,
               "displayName": "desplegado_at",
               "defaultMatch": false,
               "canBeUsedToMatch": false
@@ -578,80 +1241,344 @@
       }
     },
     {
-      "id": "respond-ok-21",
+      "id": "row-completed",
+      "name": "Row Completed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        7600,
+        -300
+      ]
+    },
+    {
+      "id": "respond-ok",
       "name": "Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        4000,
-        -100
+        1800,
+        -500
       ],
       "parameters": {
         "options": {
           "responseCode": 200
         },
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"ok\",\n  \"campaign_id\": \"{{ $('Meta Create AdSet').first().json.campaign_id }}\",\n  \"adset_id\": \"{{ $('Meta Create AdSet').first().json.id }}\",\n  \"ad_id\": \"{{ $('Meta Create Ad').first().json.id }}\"\n}"
+        "responseBody": "{\n  \"status\": \"finished\"\n}"
       }
     }
   ],
   "connections": {
-    "Webhook Deploy": {
+    "Prepare AdSet Input": {
       "main": [
         [
           {
-            "node": "Preparar Fila",
+            "node": "Meta Create AdSet",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Preparar Fila": {
+    "Meta Create AdSet": {
       "main": [
         [
           {
-            "node": "Insert Postgres",
+            "node": "Check AdSet Success",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Insert Postgres": {
+    "Check AdSet Success": {
       "main": [
         [
           {
-            "node": "Claim Postgres",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Claim Postgres": {
-      "main": [
-        [
-          {
-            "node": "Check Claimed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Claimed": {
-      "main": [
-        [
-          {
-            "node": "Variables Globales",
+            "node": "Prepare Creative Input",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Respond Already Processing",
+            "node": "Is AdSet Rate Limit Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is AdSet Rate Limit Error": {
+      "main": [
+        [
+          {
+            "node": "Increment AdSet Retry Count",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format AdSet Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment AdSet Retry Count": {
+      "main": [
+        [
+          {
+            "node": "Should AdSet Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should AdSet Retry": {
+      "main": [
+        [
+          {
+            "node": "Wait AdSet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format AdSet Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait AdSet": {
+      "main": [
+        [
+          {
+            "node": "Prepare AdSet Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Creative Input": {
+      "main": [
+        [
+          {
+            "node": "Meta Create Creative",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meta Create Creative": {
+      "main": [
+        [
+          {
+            "node": "Check Creative Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Creative Success": {
+      "main": [
+        [
+          {
+            "node": "Prepare Ad Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Creative Rate Limit Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Creative Rate Limit Error": {
+      "main": [
+        [
+          {
+            "node": "Increment Creative Retry Count",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Creative Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Creative Retry Count": {
+      "main": [
+        [
+          {
+            "node": "Should Creative Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Creative Retry": {
+      "main": [
+        [
+          {
+            "node": "Wait Creative",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Creative Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Creative": {
+      "main": [
+        [
+          {
+            "node": "Prepare Creative Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Ad Input": {
+      "main": [
+        [
+          {
+            "node": "Meta Create Ad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meta Create Ad": {
+      "main": [
+        [
+          {
+            "node": "Check Ad Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Ad Success": {
+      "main": [
+        [
+          {
+            "node": "Postgres Update Deployment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Ad Rate Limit Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Ad Rate Limit Error": {
+      "main": [
+        [
+          {
+            "node": "Increment Ad Retry Count",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Ad Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Ad Retry Count": {
+      "main": [
+        [
+          {
+            "node": "Should Ad Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Ad Retry": {
+      "main": [
+        [
+          {
+            "node": "Wait Ad",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Ad Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Ad": {
+      "main": [
+        [
+          {
+            "node": "Prepare Ad Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Deploy": {
+      "main": [
+        [
+          {
+            "node": "Preparar Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Payload": {
+      "main": [
+        [
+          {
+            "node": "Variables Globales",
             "type": "main",
             "index": 0
           }
@@ -684,40 +1611,58 @@
       "main": [
         [
           {
-            "node": "Resolve Config",
+            "node": "Extraer Campañas Únicas",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Resolve Config": {
+    "Extraer Campañas Únicas": {
       "main": [
         [
           {
-            "node": "Postgres Campaign Cache Lookup",
+            "node": "Split Campaigns",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Postgres Campaign Cache Lookup": {
+    "Split Campaigns": {
       "main": [
         [
           {
-            "node": "IF Campaign Cached",
+            "node": "Preparar Filas Deploy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lookup PG Cache",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "IF Campaign Cached": {
+    "Lookup PG Cache": {
       "main": [
         [
           {
-            "node": "Meta Create AdSet",
+            "node": "IF Cached",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Cached": {
+      "main": [
+        [
+          {
+            "node": "Campaign Resolved",
             "type": "main",
             "index": 0
           }
@@ -735,14 +1680,14 @@
       "main": [
         [
           {
-            "node": "IF Campaign Found in Meta",
+            "node": "IF Found in Meta",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "IF Campaign Found in Meta": {
+    "IF Found in Meta": {
       "main": [
         [
           {
@@ -751,6 +1696,17 @@
             "index": 0
           }
         ],
+        [
+          {
+            "node": "Resolve Objective",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Objective": {
+      "main": [
         [
           {
             "node": "Meta Create Campaign",
@@ -775,40 +1731,277 @@
       "main": [
         [
           {
-            "node": "Meta Create AdSet",
+            "node": "Campaign Resolved",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Meta Create AdSet": {
+    "Campaign Resolved": {
       "main": [
         [
           {
-            "node": "Meta Create AdCreative",
+            "node": "Split Campaigns",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Meta Create AdCreative": {
+    "Preparar Filas Deploy": {
       "main": [
         [
           {
-            "node": "Meta Create Ad",
+            "node": "Split Rows",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Meta Create Ad": {
+    "Split Rows": {
       "main": [
         [
           {
-            "node": "Postgres Update Deployment",
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar Local y FKs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Local y FKs": {
+      "main": [
+        [
+          {
+            "node": "IF Row Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Row Valid": {
+      "main": [
+        [
+          {
+            "node": "Verify IG Post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Local Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Local Error": {
+      "main": [
+        [
+          {
+            "node": "Postgres Insert Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Insert Error": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Sync Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Sync Error": {
+      "main": [
+        [
+          {
+            "node": "Row Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify IG Post": {
+      "main": [
+        [
+          {
+            "node": "Merge IG Verify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge IG Verify": {
+      "main": [
+        [
+          {
+            "node": "IF IG Post Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF IG Post Exists": {
+      "main": [
+        [
+          {
+            "node": "Insert Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format IG Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format IG Error": {
+      "main": [
+        [
+          {
+            "node": "Postgres Insert Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Postgres": {
+      "main": [
+        [
+          {
+            "node": "Claim Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Postgres": {
+      "main": [
+        [
+          {
+            "node": "Check Claimed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Claimed": {
+      "main": [
+        [
+          {
+            "node": "Resolve Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Row Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Config": {
+      "main": [
+        [
+          {
+            "node": "Lookup Campaign ID Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Campaign ID Cache": {
+      "main": [
+        [
+          {
+            "node": "Merge Campaign ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Campaign ID": {
+      "main": [
+        [
+          {
+            "node": "Prepare AdSet Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format AdSet Error": {
+      "main": [
+        [
+          {
+            "node": "Postgres Update Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Creative Error": {
+      "main": [
+        [
+          {
+            "node": "Postgres Update Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Ad Error": {
+      "main": [
+        [
+          {
+            "node": "Postgres Update Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Update Error": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Sync Error",
             "type": "main",
             "index": 0
           }
@@ -830,7 +2023,18 @@
       "main": [
         [
           {
-            "node": "Respond OK",
+            "node": "Row Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Row Completed": {
+      "main": [
+        [
+          {
+            "node": "Split Rows",
             "type": "main",
             "index": 0
           }
