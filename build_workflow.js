@@ -227,7 +227,7 @@ addNode({
   position: [2200, 300],
   parameters: {
     jsCode: `const campanaName = $('Split Campaigns').first().json.campaña;
-const campanasConfig = $('Read Campñas Sheet').all().map(i => i.json);
+const campanasConfig = $('Read Campañas Sheet').all().map(i => i.json);
 const config = campanasConfig.find(c => c.nombre && String(c.nombre).trim() === String(campanaName).trim());
 return {
   json: {
@@ -337,7 +337,7 @@ addNode({
   position: [1800, -300],
   parameters: {
     jsCode: `const items = $input.all();
-const campanas = $('Read Campñas Sheet').all().map(i => i.json);
+const campanas = $('Read Campañas Sheet').all().map(i => i.json);
 const audiencias = $('Read Audiencias Sheet').all().map(i => i.json);
 
 return items.map(item => {
@@ -641,7 +641,7 @@ addNode({
   position: [3400, -600],
   parameters: {
     jsCode: `const deploy = $input.first().json;
-const campanas = $('Read Campñas Sheet').all().map(i => i.json);
+const campanas = $('Read Campañas Sheet').all().map(i => i.json);
 const audiencias = $('Read Audiencias Sheet').all().map(i => i.json);
 
 const campanaConfig = campanas.find(c => c.nombre === deploy.campaña);

@@ -9,7 +9,7 @@
 
 ## 1. Goal Description
 
-El objetivo de este plan es reestructurar el script de compilación de n8n ([build_workflow.js](file:///e:/Development/N8NDev/DHfashion/bhfashion-auto/build_workflow.js)) para soportar el procesamiento por lotes (batch) de $N$ filas de Google Sheets de manera robusta y tolerante a fallas.
+El objetivo de este plan es reestructurar el script de compilación de n8n ([build_workflow.js](../../build_workflow.js)) para soportar el procesamiento por lotes (batch) de $N$ filas de Google Sheets de manera robusta y tolerante a fallas.
 
 Esto requiere:
 1. **Fase Preparación (Serial)**: Resolver todas las campañas requeridas en Meta (buscando en caché, Meta, o creándolas) antes de lanzar los despliegues de anuncios.
@@ -39,7 +39,7 @@ No hay preguntas abiertas pendientes; las especificaciones del lote y los mecani
 
 ## 4. Proposed Changes
 
-### [MODIFY] [build_workflow.js](file:///e:/Development/N8NDev/DHfashion/bhfashion-auto/build_workflow.js)
+### [MODIFY] [build_workflow.js](../../build_workflow.js)
 
 Reemplazaremos la definición de nodos y conexiones en `build_workflow.js` con la siguiente arquitectura:
 

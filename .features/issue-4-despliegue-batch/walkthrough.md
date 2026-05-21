@@ -9,7 +9,7 @@
 
 ## 1. Cambios Realizados
 
-Hemos reestructurado por completo la compilación del workflow de n8n ([build_workflow.js](file:///e:/Development/N8NDev/DHfashion/bhfashion-auto/build_workflow.js)) utilizando un patrón de diseño **Builder** en Node.js, reduciendo drásticamente la duplicación y mejorando la mantenibilidad.
+Hemos reestructurado por completo la compilación del workflow de n8n ([build_workflow.js](../../build_workflow.js)) utilizando un patrón de diseño **Builder** en Node.js, reduciendo drásticamente la duplicación y mejorando la mantenibilidad.
 
 ### Principales Mejoras de Arquitectura:
 1. **Lectura Eficiente de Hojas de Sheets**:
@@ -52,7 +52,7 @@ Para realizar la validación final del workflow, sigue estos pasos:
    - Abre tu instancia de n8n.
    - Crea un nuevo workflow vacío.
    - Haz clic en los tres puntos de la esquina superior derecha y selecciona **Import from File**.
-   - Sube el archivo compilado [meta-ads-deploy-compiled.json](file:///e:/Development/N8NDev/DHfashion/bhfashion-auto/meta-ads-deploy-compiled.json).
+   - Sube el archivo compilado [meta-ads-deploy-compiled.json](../../meta-ads-deploy-compiled.json).
 
 2. **Simular Payload de Webhook de Entrada**:
    Usa una herramienta como Postman, cURL, o la misma interfaz de pruebas de n8n para enviar un POST al Webhook con el siguiente body JSON (que simula 3 filas de despliegue con deduplicación y errores mixtos):

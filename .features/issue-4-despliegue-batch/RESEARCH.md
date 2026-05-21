@@ -41,7 +41,7 @@ El comportamiento requerido se divide en dos fases:
 ## 2. Investigación de Archivos y Componentes
 
 ### Archivo a Modificar:
-* [build_workflow.js](file:///e:/Development/N8NDev/DHfashion/bhfashion-auto/build_workflow.js): 
+* [build_workflow.js](../../build_workflow.js): 
   Reestructuraremos por completo la definición de nodos y conexiones en este script para compilar el nuevo flujo batch.
 
 ### Payload del Webhook (Sheets → n8n):
